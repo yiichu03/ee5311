@@ -91,6 +91,9 @@ def fit_single_candidate(
         loss_terms={name: float(value.cpu().item()) for name, value in final_terms.items()},
         history=history,
         metadata={
+            "baseline_xy": geom.baseline_xy.copy(),
+            "normals_xy": geom.normals_xy.copy(),
+            "arc_s": geom.arc_s.copy(),
             "pair_offsets": weights.pair_offsets.copy(),
             "pair_scales": weights.pair_scales.copy(),
         },

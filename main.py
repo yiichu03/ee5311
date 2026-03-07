@@ -10,6 +10,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from ee5311_ca2.data_utils import load_assignment_data
+from ee5311_ca2.diagnostics import save_diagnostic_artifacts
 from ee5311_ca2.export import write_results_csv
 from ee5311_ca2.search import run_candidate_search
 from ee5311_ca2.types import FitConfig
@@ -72,6 +73,12 @@ def parse_args() -> argparse.Namespace:
         default=[1.0, 1.005, 1.01, 1.015, 1.02],
         help="Candidate average spacings to try during the outer search.",
     )
+    parser.add_argument(
+        "--diagnostics-dir",
+        type=Path,
+        default=PROJECT_ROOT / "artifacts",
+        help="Directory for plots and residual summaries.",
+    )
     return parser.parse_args()
 
 
@@ -89,10 +96,16 @@ def main() -> None:
     )
     result = run_candidate_search(data, config)
     write_results_csv(args.output, data.sensor_ids, result.sensor_positions)
+    save_diagnostic_artifacts(args.diagnostics_dir, data, result, config)
 
     print(f"Best candidate start_s={result.start_s:.3f} m spacing={result.spacing:.6f} m")
     print(f"Final objective={result.final_objective:.6f}")
     print(f"Wrote results to {args.output}")
+    print(f"Wrote diagnostics to {args.diagnostics_dir}")
+
+    skipped = result.metadata.get("skipped_candidates", [])
+    if skipped:
+        print(f"Skipped {len(skipped)} invalid candidates during outer search")
 
 
 if __name__ == "__main__":

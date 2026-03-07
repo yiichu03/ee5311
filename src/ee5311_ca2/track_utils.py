@@ -56,4 +56,4 @@ def feasible_start_positions(track_xy: np.ndarray, spacing: float, n_sensors: in
         raise ValueError("Track is too short for the requested number of sensors and spacing.")
     if step <= 0:
         raise ValueError("Search step must be positive.")
-    return np.arange(0.0, max_start + 0.5 * step, step, dtype=np.float64)
+    return np.arange(0.0, max_start + 1e-9, step, dtype=np.float64)
