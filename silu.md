@@ -1054,7 +1054,77 @@ Python 完全够，而且是合理选择。
   现在最紧迫的是：先把间距违规降到0，再写报告打包。要我帮你做这两件事吗？
 
 
+● 找到了！根本原因不在优化参数，而是在 build_baseline_geometry 里的一个几何 bug。
+                                                                                                                                         
+  ---                                                                                                                                    
+  根本原因分析
+                                                                                                                                         
+  GPS track 在 s=1417-1537m 附近有极端的段长比：
+    row 34→35: 仅 4.78m 短段
+    row 35→36: 114.85m 超长段（10倍跳变！）
 
+  CubicSpline 参数是 GPS 折线累积弧长，但 Cubic 样条的实际速度 |dr/ds|：
+    s=1460~1474m 处：|dr/ds| ≈ 1.66（应该是 1.0！）
+
+  本质问题： CubicSpline 以 GPS 折线弧长作为参数 s，在段长突变处样条会"超速"——对应每米 s 步进，实际欧式移动 1.66m，而不是 1.0m。所以
+  spacing=1.0m 采样出来的 baseline 点之间就已经相隔 1.66m，任何正则化都救不了。
+
+  这与 spacing_penalty 无关，是 baseline 构造本身的问题。
+
+  ---
+  修复方案
+
+  需要在 track_utils.py 的 build_baseline_geometry 里，把"按 GPS-弧长等间隔采样"改成"按样条自身弧长等间隔采样"：
+
+  # 在 build_baseline_geometry 里，替换 arc_s 的计算方式
+
+  # 1. 在 GPS 参数空间密集采样，重建样条真实弧长
+  s_dense = np.linspace(s_track[0], s_track[-1], int(s_track[-1] * 100))
+  x_dense = sx(s_dense)
+  y_dense = sy(s_dense)
+  spline_arc = np.concatenate([[0.0],
+      np.cumsum(np.sqrt(np.diff(x_dense)**2 + np.diff(y_dense)**2))])
+
+  # 2. 在样条弧长空间里等间隔选目标点
+  needed_spline_arc = start_s + spacing * (n_sensors - 1)
+  if needed_spline_arc > spline_arc[-1]:
+      raise ValueError(...)
+
+  target_arc = start_s + spacing * np.arange(n_sensors)
+
+  # 3. 把样条弧长位置映射回 GPS 参数 s，再求 xy
+  arc_s = np.interp(target_arc, spline_arc, s_dense)
+  # 后面正常用 sx(arc_s), sy(arc_s) 即可
+
+  这样保证 baseline 每相邻两点的欧式距离 ≈ spacing，基本消除违规。
+
+  ---
+  当前状态总结
+
+  ┌──────────────────────────────────┬────────────────────────┐
+  │               项目               │          状态          │
+  ├──────────────────────────────────┼────────────────────────┤
+  │ 参数选择（spacing_penalty=1000） │ 没问题，这不是瓶颈     │
+  ├──────────────────────────────────┼────────────────────────┤
+  │ 优化收敛                         │ 没问题，模型在正常工作 │
+  ├──────────────────────────────────┼────────────────────────┤
+  │ baseline 构造（弧长采样）        │ 🔴 这是根本 bug        │
+  ├──────────────────────────────────┼────────────────────────┤
+  │ TOA 残差质量                     │ 合理                   │
+  └──────────────────────────────────┴────────────────────────┘
+
+  修这一处（track_utils.py 中约 10 行），spacing violations 应该会基本消失。需要我帮你写这段代码吗？
+
+简单总结这次修复：                                                                                                               
+   
+  - 问题：CubicSpline 以 GPS 折线弧长为参数，但在 GPS 段长突变处（4.78m → 114.85m），样条速度 |dr/ds| 达到 1.66，采样 1m           
+  参数间距实际上移动了 1.66m。
+  - 修复：先密采样样条（50点/m）重建其真实欧式弧长，再以等弧长间隔反查 GPS 参数值，确保 baseline 点之间的欧式距离 ≈ spacing。
+  - 结果：baseline 最大间距从 1.664m 降到 1.000m，最终 results.csv 0 violations，max 1.0205m（在 1.0213m 限制内）。
+
+python main.py --data-dir 'EE5311 CA2 data' --output results.csv --diagnostics-dir artifacts --start-step 10 --spacing-candidates 1.0 1.005 1.01 1.015 1.02 --adam-steps 800 --lbfgs-steps 80
+
+python main.py --data-dir 'EE5311 CA2 data' --output results.csv --diagnostics-dir artifacts --start-step 5 --spacing-candidates 1.0 1.005 1.01 1.015 1.02 --adam-steps 1500 --lbfgs-steps 150
 
 
 

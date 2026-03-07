@@ -1,49 +1,87 @@
-EE5311 CA2 Scaffold
+EE5311 CA2 — Seabed Sensor Array Localization
+==============================================
 
-This repository now contains a starter scaffold for the assignment based on:
-- NumPy for data handling
-- SciPy for track interpolation and B-spline basis construction
-- PyTorch autograd for differentiable MAP optimization
+Approach
+--------
+Physics-guided differentiable MAP estimation.
+The array is modeled as a smooth lateral deviation from the ship track.
+Inference uses PyTorch autograd (Adam + L-BFGS) with a Student-t observation
+model and repeated-shot reliability weights.
 
-Files
-- main.py: entrypoint
-- check_results.py: standalone checker for results.csv
-- src/ee5311_ca2/data_utils.py: CSV loading
-- src/ee5311_ca2/track_utils.py: track arclength parametrization and baseline sampling
-- src/ee5311_ca2/weights.py: repeated-shot reliability weights
-- src/ee5311_ca2/basis.py: B-spline basis matrix
-- src/ee5311_ca2/model.py: differentiable probabilistic model
-- src/ee5311_ca2/fit.py: inner optimization
-- src/ee5311_ca2/search.py: outer search over baseline start and spacing
-- src/ee5311_ca2/diagnostics.py: SVG geometry plots and residual diagnostics
-- src/ee5311_ca2/validation.py: automatic physical-constraint checks
-- docs/analysis_framework.md: assignment analysis outline
-- docs/report_template.md: 2-page report template
-- docs/report_draft.md: draft English report text
+Key design choices:
+  - Geometry: p_i = baseline_i + d_i * normal_i  (B-spline lateral offset)
+  - Observation model: Student-t NLL (robust to outlier timing measurements)
+  - tau_j estimated jointly as nuisance parameters (avoids noisy TDOA differencing)
+  - Outer search over baseline start position and sensor spacing candidates
+  - Baseline sampled at equal spline arc-length intervals (not GPS arc-length)
+    to avoid spacing errors near track segments with large length variation
 
-Suggested environment
-- Python 3.10+
-- numpy
-- scipy
-- torch
+Environment setup
+-----------------
+  conda create -n 5311 python=3.11 -y
+  conda activate 5311
+  pip install numpy scipy "torch" --extra-index-url https://download.pytorch.org/whl/cpu
 
-Example command
-python main.py --data-dir "EE5311 CA2 data" --output results.csv --diagnostics-dir artifacts
+Reproducing results
+-------------------
+  conda activate 5311
+  python main.py \
+      --data-dir "EE5311 CA2 data" \
+      --output results.csv \
+      --diagnostics-dir artifacts \
+      --start-step 5 \
+      --spacing-candidates 1.0 1.005 1.01 1.015 1.02 \
+      --adam-steps 1500 \
+      --lbfgs-steps 150
 
-Standalone result check
-python check_results.py --results results.csv
+Expected output:
+  Best candidate start_s=40.000 m spacing=1.020000 m
+  Final objective=-2.578593
+  Physical constraints: PASS
+  Spacing violations: 0/1925 (max ~1.021 m, limit 1.021300 m)
 
-Suggested workflow
-1. Run the scaffold with a small search first:
-   python main.py --start-step 20 --adam-steps 300 --lbfgs-steps 50 --spacing-candidates 1.0 1.01
-2. Inspect the best candidate and loss terms.
-3. Inspect artifacts/geometry.svg, artifacts/spacing_hist.svg, and artifacts/residual_boxplot.svg.
-4. Inspect artifacts/physical_check.txt or run python check_results.py --results results.csv.
-5. Re-run with a denser outer search and longer optimization.
+Verifying results independently
+--------------------------------
+  python check_results.py --results results.csv
 
-Notes
-- The current scaffold treats arrival times with a Student-t observation model.
-- Transmission start times are estimated jointly as nuisance parameters tau_j.
-- The array is represented as a baseline sampled from the ship track plus a smooth lateral offset field.
-- Diagnostics are written as SVG files, so no plotting package is required.
-- main.py now prints PASS/FAIL for the physical spacing constraint after each run.
+Diagnostics (written to --diagnostics-dir)
+------------------------------------------
+  geometry.svg          — estimated array vs ship track vs transmitters
+  residual_boxplot.svg  — TOA residual distribution per shot
+  spacing_hist.svg      — adjacent sensor spacing histogram
+  residual_summary.csv  — per-shot mean/median residual, RMSE, sigma, tau
+
+Source layout
+-------------
+  main.py                          entry point
+  check_results.py                 standalone format + physics checker
+  src/ee5311_ca2/
+    data_utils.py                  CSV loading
+    track_utils.py                 track arclength, spline arc-length resampling
+    basis.py                       B-spline basis matrix
+    weights.py                     repeated-shot reliability weights
+    model.py                       differentiable probabilistic forward model
+    fit.py                         inner Adam + L-BFGS optimization
+    search.py                      outer search over start_s and spacing
+    export.py                      results.csv writer
+    diagnostics.py                 SVG plots and residual CSV
+    validation.py                  physical constraint checks
+    types.py                       dataclasses (AssignmentData, FitConfig, ...)
+  docs/
+    analysis_framework.md          problem analysis and modeling rationale
+    report_draft.md                draft report text with actual results
+    report_template.md             2-page report structure checklist
+
+CLI reference
+-------------
+  --data-dir DIR           directory containing the three assignment CSV files
+                           (default: "EE5311 CA2 data")
+  --output PATH            path to write results.csv  (default: results.csv)
+  --diagnostics-dir DIR    write SVGs and residual_summary.csv here
+  --num-controls N         B-spline control points for lateral offset (default: 40)
+  --spacing-candidates S…  candidate average spacings in metres (default: 1.0 1.005 1.01 1.015 1.02)
+  --start-step M           grid step in metres for start-position search (default: 5.0)
+  --adam-steps N           Adam iterations per candidate (default: 1500)
+  --lbfgs-steps N          L-BFGS iterations for polishing (default: 150)
+  --student-nu NU          Student-t degrees of freedom (default: 4.0)
+  --device STR             torch device, e.g. cpu or cuda (default: cpu)

@@ -35,6 +35,21 @@ To avoid overfitting, the offset field is not optimized pointwise. Instead, `d =
 
 This gives a low-dimensional, physically interpretable shape model.
 
+### Important: spline arc-length resampling
+
+`CubicSpline` fitted to GPS arc-length is NOT an arc-length parameterized curve.
+The GPS track contains segments whose lengths vary by more than 20x (e.g. a 4.8 m
+segment followed immediately by a 114.9 m segment). In such regions, the cubic
+spline's actual speed |dr/ds| deviates far from 1 — reaching ~1.66 in the worst
+case — so consecutive baseline points sampled at 1 m GPS-arc intervals end up
+1.66 m apart in Euclidean space, violating the cable constraint before any
+optimization.
+
+Fix implemented in `track_utils.build_baseline_geometry`: densely sample the spline
+(50 pts/m), compute its true cumulative Euclidean arc length, then invert to find
+the GPS parameter values corresponding to equal spline arc-length intervals. After
+this fix, baseline spacing max = 1.000 m with zero violations.
+
 ## 4. Observation Model
 
 For sensor `i` and transmission `j`, the predicted arrival time is:

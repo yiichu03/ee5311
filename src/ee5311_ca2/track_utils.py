@@ -29,7 +29,25 @@ def build_baseline_geometry(
 
     sx = CubicSpline(s_track, track_xy[:, 0], bc_type="natural")
     sy = CubicSpline(s_track, track_xy[:, 1], bc_type="natural")
-    arc_s = start_s + spacing * np.arange(n_sensors, dtype=np.float64)
+
+    # Resample at equal spline arc-length intervals.
+    # CubicSpline is NOT arc-length parameterized: in regions where the GPS
+    # track has extreme segment-length variation, |dr/ds| can deviate
+    # significantly from 1, causing consecutive baseline points to be far
+    # apart even though they are only `spacing` apart in GPS arc-length.
+    # Fix: densely sample the spline to recover its true arc length, then
+    # find the GPS-parameter values that correspond to equal spline arc-length
+    # intervals of `spacing` metres.
+    n_dense = max(10000, int((total_length - start_s) * 50))
+    s_dense = np.linspace(start_s, total_length, n_dense)
+    x_dense = sx(s_dense)
+    y_dense = sy(s_dense)
+    spline_arc = np.concatenate([
+        [0.0],
+        np.cumsum(np.sqrt(np.diff(x_dense) ** 2 + np.diff(y_dense) ** 2)),
+    ])
+    target_arc = spacing * np.arange(n_sensors, dtype=np.float64)
+    arc_s = np.interp(target_arc, spline_arc, s_dense)
 
     baseline_x = sx(arc_s)
     baseline_y = sy(arc_s)
