@@ -1,0 +1,15 @@
+Format checks: PASS
+Physical constraints: FAIL
+Expected sensors: 1926
+Actual sensors: 1926
+Sensor IDs consecutive: True
+Coordinates finite: True
+Adjacent edges checked: 1925
+Spacing min: 0.068474 m
+Spacing median: 1.004868 m
+Spacing mean: 1.021256 m
+Spacing max: 1.653679 m
+Allowed max spacing: 1.021300 m
+Spacing violations: 630
+Violation fraction: 32.7273%
+Total array length: 1965.917480 m

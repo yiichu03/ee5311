@@ -48,8 +48,8 @@ class FitConfig:
     lbfgs_lr: float = 0.5
     offset_penalty: float = 2.0
     smoothness_penalty: float = 8.0
-    spacing_penalty: float = 50.0
-    spacing_anchor_penalty: float = 2.0
+    spacing_penalty: float = 1000.0
+    spacing_anchor_penalty: float = 25.0
     sigma_penalty: float = 1e-3
     start_step: float = 5.0
     spacing_candidates: tuple[float, ...] = (1.0, 1.005, 1.01, 1.015, 1.02)
@@ -69,4 +69,3 @@ class FitResult:
     loss_terms: dict[str, float] = field(default_factory=dict)
     history: list[dict[str, float]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
-

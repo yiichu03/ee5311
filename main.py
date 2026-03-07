@@ -14,6 +14,7 @@ from ee5311_ca2.diagnostics import save_diagnostic_artifacts
 from ee5311_ca2.export import write_results_csv
 from ee5311_ca2.search import run_candidate_search
 from ee5311_ca2.types import FitConfig
+from ee5311_ca2.validation import validate_sensor_geometry, write_validation_report
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,11 +98,25 @@ def main() -> None:
     result = run_candidate_search(data, config)
     write_results_csv(args.output, data.sensor_ids, result.sensor_positions)
     save_diagnostic_artifacts(args.diagnostics_dir, data, result, config)
+    validation = validate_sensor_geometry(
+        sensor_ids=data.sensor_ids,
+        sensor_positions=result.sensor_positions,
+        expected_sensors=len(data.sensor_ids),
+        max_spacing=config.max_spacing,
+    )
+    write_validation_report(args.diagnostics_dir / "physical_check.txt", validation, config.max_spacing)
 
     print(f"Best candidate start_s={result.start_s:.3f} m spacing={result.spacing:.6f} m")
     print(f"Final objective={result.final_objective:.6f}")
     print(f"Wrote results to {args.output}")
     print(f"Wrote diagnostics to {args.diagnostics_dir}")
+    print(f"Format checks: {'PASS' if validation.passes_format_checks else 'FAIL'}")
+    print(f"Physical constraints: {'PASS' if validation.passes_physical_constraints else 'FAIL'}")
+    print(
+        "Spacing violations: "
+        f"{validation.spacing_violation_count}/{validation.num_edges} "
+        f"(max {validation.spacing_max:.6f} m, limit {config.max_spacing:.6f} m)"
+    )
 
     skipped = result.metadata.get("skipped_candidates", [])
     if skipped:
