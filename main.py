@@ -83,10 +83,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    data = load_assignment_data(args.data_dir)
-    config = FitConfig(
+def build_config(args: argparse.Namespace) -> FitConfig:
+    """Translate CLI arguments into the config object used by the pipeline."""
+    return FitConfig(
         num_controls=args.num_controls,
         student_nu=args.student_nu,
         adam_steps=args.adam_steps,
@@ -95,21 +94,20 @@ def main() -> None:
         start_step=args.start_step,
         spacing_candidates=tuple(args.spacing_candidates),
     )
-    result = run_candidate_search(data, config)
-    write_results_csv(args.output, data.sensor_ids, result.sensor_positions)
-    save_diagnostic_artifacts(args.diagnostics_dir, data, result, config)
-    validation = validate_sensor_geometry(
-        sensor_ids=data.sensor_ids,
-        sensor_positions=result.sensor_positions,
-        expected_sensors=len(data.sensor_ids),
-        max_spacing=config.max_spacing,
-    )
-    write_validation_report(args.diagnostics_dir / "physical_check.txt", validation, config.max_spacing)
 
+
+def print_run_summary(
+    result,
+    validation,
+    config: FitConfig,
+    output_path: Path,
+    diagnostics_dir: Path,
+) -> None:
+    """Print the key facts a user needs after one full run."""
     print(f"Best candidate start_s={result.start_s:.3f} m spacing={result.spacing:.6f} m")
     print(f"Final objective={result.final_objective:.6f}")
-    print(f"Wrote results to {args.output}")
-    print(f"Wrote diagnostics to {args.diagnostics_dir}")
+    print(f"Wrote results to {output_path}")
+    print(f"Wrote diagnostics to {diagnostics_dir}")
     print(f"Format checks: {'PASS' if validation.passes_format_checks else 'FAIL'}")
     print(f"Physical constraints: {'PASS' if validation.passes_physical_constraints else 'FAIL'}")
     print(
@@ -118,9 +116,31 @@ def main() -> None:
         f"(max {validation.spacing_max:.6f} m, limit {config.max_spacing:.6f} m)"
     )
 
-    skipped = result.metadata.get("skipped_candidates", [])
-    if skipped:
-        print(f"Skipped {len(skipped)} invalid candidates during outer search")
+    num_evaluated = result.metadata.get("num_evaluated_candidates")
+    num_skipped = result.metadata.get("num_skipped_candidates")
+    if num_evaluated is not None:
+        print(f"Candidates evaluated: {num_evaluated}")
+    if num_skipped:
+        print(f"Candidates skipped: {num_skipped}")
+
+
+def main() -> None:
+    args = parse_args()
+    data = load_assignment_data(args.data_dir)
+    config = build_config(args)
+
+    result = run_candidate_search(data, config)
+    write_results_csv(args.output, data.sensor_ids, result.sensor_positions)
+    save_diagnostic_artifacts(args.diagnostics_dir, data, result, config)
+
+    validation = validate_sensor_geometry(
+        sensor_ids=data.sensor_ids,
+        sensor_positions=result.sensor_positions,
+        expected_sensors=len(data.sensor_ids),
+        max_spacing=config.max_spacing,
+    )
+    write_validation_report(args.diagnostics_dir / "physical_check.txt", validation, config.max_spacing)
+    print_run_summary(result, validation, config, args.output, args.diagnostics_dir)
 
 
 if __name__ == "__main__":

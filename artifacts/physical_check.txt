@@ -5,11 +5,11 @@ Actual sensors: 1926
 Sensor IDs consecutive: True
 Coordinates finite: True
 Adjacent edges checked: 1925
-Spacing min: 0.881590 m
+Spacing min: 0.881193 m
 Spacing median: 1.019982 m
-Spacing mean: 1.019704 m
-Spacing max: 1.020550 m
+Spacing mean: 1.019703 m
+Spacing max: 1.020528 m
 Allowed max spacing: 1.021300 m
 Spacing violations: 0
 Violation fraction: 0.0000%
-Total array length: 1962.929688 m
+Total array length: 1962.928345 m

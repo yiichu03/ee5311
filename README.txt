@@ -48,7 +48,7 @@ Diagnostics (written to --diagnostics-dir)
 ------------------------------------------
   geometry.svg          — estimated array vs ship track vs transmitters
   residual_boxplot.svg  — TOA residual distribution per shot
-  spacing_hist.svg      — adjacent sensor spacing histogram
+  spacing_hist.svg      — adjacent sensor spacing profile along the array
   residual_summary.csv  — per-shot mean/median residual, RMSE, sigma, tau
 
 Source layout

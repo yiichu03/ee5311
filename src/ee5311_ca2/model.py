@@ -8,6 +8,8 @@ from .types import FitConfig
 
 
 class ArrayShapeModel(nn.Module):
+    """Differentiable forward model and MAP objective for one baseline candidate."""
+
     def __init__(
         self,
         baseline_xy,
@@ -40,17 +42,20 @@ class ArrayShapeModel(nn.Module):
         self.log_sigma = nn.Parameter(torch.log(torch.expm1(sigma0)))
 
     def sensor_positions(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Recover sensor coordinates from baseline points and lateral offsets."""
         offsets = self.basis_matrix @ self.ctrl
         positions = self.baseline_xy + offsets[:, None] * self.normals_xy
         return positions, offsets
 
     def predicted_times(self, positions: torch.Tensor) -> torch.Tensor:
+        """Evaluate the 3D acoustic travel-time model plus unknown shot offsets."""
         dx = positions[:, None, 0] - self.tx_xy[None, :, 0]
         dy = positions[:, None, 1] - self.tx_xy[None, :, 1]
         dist = torch.sqrt(dx * dx + dy * dy + self.config.z_offset ** 2)
         return self.tau[None, :] + dist / self.config.sound_speed
 
     def student_t_nll(self, residual: torch.Tensor) -> torch.Tensor:
+        """Heavy-tailed observation model for noisy TOA measurements."""
         sigma = F.softplus(self.log_sigma) + 1e-4
         scaled = residual / sigma[None, :]
         nu = torch.as_tensor(float(self.config.student_nu), dtype=residual.dtype, device=residual.device)
@@ -62,10 +67,13 @@ class ArrayShapeModel(nn.Module):
         pred = self.predicted_times(positions)
         residual = self.timings - pred
 
+        # Data fit: robust likelihood, weighted by repeated-shot consistency.
         data_nll = self.student_t_nll(residual)
         valid_weight = self.obs_weights * self.obs_mask
         data_loss = (valid_weight * data_nll).sum() / torch.clamp(valid_weight.sum(), min=1.0)
 
+        # Geometry priors: smooth offsets, modest departure from the baseline,
+        # and a strong penalty for exceeding the cable's spacing limit.
         smoothness = (offsets[2:] - 2.0 * offsets[1:-1] + offsets[:-2]).pow(2).mean()
         offset_mag = offsets.pow(2).mean()
 
